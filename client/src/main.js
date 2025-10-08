@@ -8,6 +8,16 @@ const distEl = document.getElementById("distance");
 const statusEl = document.getElementById("status");
 const awayEl = document.getElementById("awayTime");
 
+// Initialize Leaflet map
+const map = L.map('map').setView([0, 0], 2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+}).addTo(map);
+
+let homeMarker = null;
+let userMarker = null;
+let polyline = L.polyline([], { color: 'red' }).addTo(map);
+
 document.getElementById("setHome").addEventListener("click", setHome);
 document.getElementById("start").addEventListener("click", startTracking);
 document.getElementById("stop").addEventListener("click", stopTracking);
@@ -17,7 +27,12 @@ function setHome() {
   navigator.geolocation.getCurrentPosition((pos) => {
     home = [pos.coords.latitude, pos.coords.longitude];
     localStorage.setItem("home", JSON.stringify(home));
-    statusEl.textContent = "Home"; // update immediately
+
+    if (homeMarker) homeMarker.remove();
+    homeMarker = L.marker(home).addTo(map).bindPopup("Home").openPopup();
+    map.setView(home, 15);
+
+    statusEl.textContent = "Home";
     distEl.textContent = "0";
     alert("Home location saved!");
   }, (err) => {
@@ -30,12 +45,12 @@ function startTracking() {
   home = JSON.parse(localStorage.getItem("home"));
   if (!home) return alert("Set home first!");
 
-  // Initial check immediately
+  // Initial position
   navigator.geolocation.getCurrentPosition(updatePosition, handleError, { enableHighAccuracy: true });
 
   watchId = navigator.geolocation.watchPosition(updatePosition, handleError, {
     enableHighAccuracy: true,
-    maximumAge: 1000, // avoiding very old cached positions
+    maximumAge: 1000,
     timeout: 5000
   });
 }
@@ -53,7 +68,7 @@ function updatePosition(pos) {
   const distance = haversineMeters(home, current);
   distEl.textContent = distance.toFixed(1);
 
-  const threshold = 50; // meters, reduce threshold for more sensitive tracking
+  const threshold = 50;
   if (distance > threshold && !isAway) {
     isAway = true;
     awayStart = Date.now();
@@ -64,12 +79,21 @@ function updatePosition(pos) {
     awayStart = null;
     statusEl.textContent = "Home";
   } else if (!isAway && distance <= threshold) {
-    statusEl.textContent = "Home"; 
+    statusEl.textContent = "Home";
   }
 
   let total = totalAwayMs;
   if (isAway) total += Date.now() - awayStart;
   awayEl.textContent = formatMs(total);
+
+  // Update map
+  if (!userMarker) {
+    userMarker = L.marker(current).addTo(map).bindPopup("You").openPopup();
+  } else {
+    userMarker.setLatLng(current);
+  }
+  polyline.addLatLng(current);
+  map.panTo(current);
 }
 
 function handleError(err) {
@@ -78,7 +102,7 @@ function handleError(err) {
 }
 
 function haversineMeters([lat1, lon1], [lat2, lon2]) {
-  const R = 6371e3; // meters
+  const R = 6371e3;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
