@@ -1,5 +1,8 @@
 let home = null;
 let watchId = null;
+let accurateWatch = null;
+let onAccurateProgress = null;
+let onAccurateFound = null;
 let isAway = false;
 let awayStart = null;
 let totalAwayMs = 0;
@@ -55,23 +58,69 @@ function startTracking() {
   home = JSON.parse(localStorage.getItem("home"));
   if (!home) return alert("Set home first!");
 
-  // Initial position
-  navigator.geolocation.getCurrentPosition(updatePositionAsyncWrapper, handleError, { enableHighAccuracy: true });
+  // Remove any previous handlers to avoid duplicates
+  if (onAccurateProgress) map.off('accuratepositionprogress', onAccurateProgress);
+  if (onAccurateFound) map.off('accuratepositionfound', onAccurateFound);
 
-  watchId = navigator.geolocation.watchPosition(updatePositionAsyncWrapper, handleError, {
-    enableHighAccuracy: true,
-    maximumAge: 1000,
-    timeout: 5000
+  // Set up event listeners
+  onAccurateProgress = e => {
+    console.log(`Progress: accuracy ${e.accuracy}m at`, e.latlng);
+  };
+
+  onAccurateFound = e => {
+    console.log(`Accurate position found:`, e.latlng, `(±${e.accuracy}m)`);
+
+    // Update position on map and calculate distance/away time
+    updatePosition({
+      coords: {
+        latitude: e.latlng.lat,
+        longitude: e.latlng.lng
+      }
+    });
+
+    // Reverse geocode
+    getAddress(e.latlng.lat, e.latlng.lng).then(address => {
+      const curEl = document.getElementById("currentLocation");
+      if (curEl) curEl.textContent = address;
+      if (userMarker) userMarker.bindPopup("You: " + address);
+    }).catch(err => console.error(err));
+  };
+
+  map.on('accuratepositionprogress', onAccurateProgress);
+  map.on('accuratepositionfound', onAccurateFound);
+
+  // Start accurate position tracking (acts like watchPosition)
+  accurateWatch = map.findAccuratePosition({
+    maxWait: 15000,
+    desiredAccuracy: 30,
+    watch: true
   });
 }
 
 // Stop Tracking
 function stopTracking() {
+  // Stop any navigator.watch if present
   if (watchId) {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
-    statusEl.textContent = "Stopped";
   }
+
+  // Stop AccuratePosition watch if running and remove handlers
+  if (accurateWatch && typeof accurateWatch.stop === 'function') {
+    accurateWatch.stop();
+    accurateWatch = null;
+  }
+
+  if (onAccurateProgress) {
+    map.off('accuratepositionprogress', onAccurateProgress);
+    onAccurateProgress = null;
+  }
+  if (onAccurateFound) {
+    map.off('accuratepositionfound', onAccurateFound);
+    onAccurateFound = null;
+  }
+
+  statusEl.textContent = "Stopped";
 }
 
 // Update Position (sync)
