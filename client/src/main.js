@@ -22,9 +22,11 @@ document.getElementById("setHome").addEventListener("click", setHome);
 document.getElementById("start").addEventListener("click", startTracking);
 document.getElementById("stop").addEventListener("click", stopTracking);
 
+// Set Home Location
 function setHome() {
   if (!navigator.geolocation) return alert("Geolocation not supported");
-  navigator.geolocation.getCurrentPosition((pos) => {
+
+  navigator.geolocation.getCurrentPosition(pos => {
     home = [pos.coords.latitude, pos.coords.longitude];
     localStorage.setItem("home", JSON.stringify(home));
 
@@ -34,27 +36,36 @@ function setHome() {
 
     statusEl.textContent = "Home";
     distEl.textContent = "0";
-    alert("Home location saved!");
-  }, (err) => {
+
+    // Fetch and display home address
+    getAddress(home[0], home[1]).then(address => {
+      const homeAddrEl = document.getElementById("homeAddress");
+      if (homeAddrEl) homeAddrEl.textContent = address;
+      alert("Home location saved!\nAddress: " + address);
+    }).catch(err => console.error(err));
+
+  }, err => {
     console.error("Geo error:", err);
     alert("Failed to get location");
   }, { enableHighAccuracy: true });
 }
 
+// Start Tracking
 function startTracking() {
   home = JSON.parse(localStorage.getItem("home"));
   if (!home) return alert("Set home first!");
 
   // Initial position
-  navigator.geolocation.getCurrentPosition(updatePosition, handleError, { enableHighAccuracy: true });
+  navigator.geolocation.getCurrentPosition(updatePositionAsyncWrapper, handleError, { enableHighAccuracy: true });
 
-  watchId = navigator.geolocation.watchPosition(updatePosition, handleError, {
+  watchId = navigator.geolocation.watchPosition(updatePositionAsyncWrapper, handleError, {
     enableHighAccuracy: true,
     maximumAge: 1000,
     timeout: 5000
   });
 }
 
+// Stop Tracking
 function stopTracking() {
   if (watchId) {
     navigator.geolocation.clearWatch(watchId);
@@ -63,12 +74,13 @@ function stopTracking() {
   }
 }
 
+// Update Position (sync)
 function updatePosition(pos) {
   const current = [pos.coords.latitude, pos.coords.longitude];
   const distance = haversineMeters(home, current);
   distEl.textContent = distance.toFixed(1);
 
-  const threshold = 1; //in meters 
+  const threshold = 1; // meters
   if (distance > threshold && !isAway) {
     isAway = true;
     awayStart = Date.now();
@@ -86,7 +98,7 @@ function updatePosition(pos) {
   if (isAway) total += Date.now() - awayStart;
   awayEl.textContent = formatMs(total);
 
-  // Update map
+  // Update map marker
   if (!userMarker) {
     userMarker = L.marker(current).addTo(map).bindPopup("You").openPopup();
   } else {
@@ -96,11 +108,38 @@ function updatePosition(pos) {
   map.panTo(current);
 }
 
+// Async wrapper for address fetching
+function updatePositionAsyncWrapper(pos) {
+  updatePosition(pos); // synchronous updates
+
+  const current = [pos.coords.latitude, pos.coords.longitude];
+  getAddress(current[0], current[1]).then(address => {
+    const curEl = document.getElementById("currentLocation");
+    if (curEl) curEl.textContent = address;
+    if (userMarker) userMarker.bindPopup("You: " + address);
+  }).catch(err => console.error(err));
+}
+
+// Reverse Geocoding via OpenStreetMap
+async function getAddress(lat, lon) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
+    if (!res.ok) throw new Error('Network response was not ok');
+    const data = await res.json();
+    return data.display_name || "Address not found";
+  } catch (err) {
+    console.error("Reverse geocode error:", err);
+    return "Address not found";
+  }
+}
+
+// Error Handling
 function handleError(err) {
   console.warn("Geo error:", err.message);
   statusEl.textContent = "Error";
 }
 
+// Haversine Distance
 function haversineMeters([lat1, lon1], [lat2, lon2]) {
   const R = 6371e3;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -113,6 +152,7 @@ function haversineMeters([lat1, lon1], [lat2, lon2]) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Format milliseconds to h/m/s
 function formatMs(ms) {
   const s = Math.floor(ms / 1000) % 60;
   const m = Math.floor(ms / 60000) % 60;
