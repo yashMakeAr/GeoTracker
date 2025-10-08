@@ -68,7 +68,7 @@ function updatePosition(pos) {
   const distance = haversineMeters(home, current);
   distEl.textContent = distance.toFixed(1);
 
-  const threshold = 50;
+  const threshold = 1; //in meters 
   if (distance > threshold && !isAway) {
     isAway = true;
     awayStart = Date.now();
