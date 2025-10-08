@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Geo Tracker</title>
+    <style>
+      body { font-family: sans-serif; padding: 2rem; }
+      button { margin-right: 8px; padding: 6px 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Geo Tracker</h1>
+    <div>
+      <button id="setHome">Set Home Location</button>
+      <button id="start">Start Tracking</button>
+      <button id="stop">Stop Tracking</button>
+    </div>
+    <p>Distance from Home: <span id="distance">--</span> meters</p>
+    <p>Status: <span id="status">unknown</span></p>
+    <p>Away Time: <span id="awayTime">0s</span></p>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
